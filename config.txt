@@ -1,0 +1,9 @@
+1                     Mesh Direction
+2                     Span Direction x: 1 y: 2 z: 3
+20                    Span strips
+20                    Chord strips
+0                     0: Chord equally divided    1: Chord division given
+3                     Leading Edge Definition
+6.69000   0.00000   1.30200   2.228   2.000
+6.69000   6.15000   1.51676   2.228   2.000
+6.69000  10.25000   1.65994   1.337   0.000
