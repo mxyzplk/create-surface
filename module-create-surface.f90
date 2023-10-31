@@ -47,7 +47,7 @@ MODULE MODULE_CREATE_SURFACE
         WRITE(40,'("CELLS ",I8,I8)')S%NP, S%NP*5
         
         DO I=1, S%NP
-            WRITE(40,'(I2,4I8)')4, S%CN(I,1), S%CN(I,2), S%CN(I,3), S%CN(I,4)
+            WRITE(40,'(I2,4I8)')4, S%CN(I,1)-1, S%CN(I,2)-1, S%CN(I,3)-1, S%CN(I,4)-1
         END DO
 
         !WRITE(40, *)
