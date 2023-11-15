@@ -17,11 +17,22 @@ MODULE MODULE_CREATE_SURFACE
         INTEGER :: DIRS, MDIR
         INTEGER :: N      ! SPAN STRIPS
         INTEGER :: M      ! CHORD STRIPS
-        INTEGER :: COPT
-        REAL*8, ALLOCATABLE :: CDEF(:)
+        INTEGER :: COPT, SOPT
+        INTEGER :: POPT
+        REAL*8, ALLOCATABLE :: CDEF(:), SDEF(:)
         INTEGER :: NLE
         REAL*8 :: DX, DY, DZ
+        TYPE(AIRFOIL), ALLOCATABLE :: PROFILES(:)
     END TYPE CONFIG
+    
+    
+    TYPE AIRFOIL
+        REAL*8, ALLOCATABLE :: UPSUF(:,:), LOSUF(:,:)
+        REAL*8, ALLOCATABLE :: UPSUF2(:,:), LOSUF2(:,:)
+        INTEGER :: NUP, NLO
+        CHARACTER(LEN=30) :: FNAME
+    END TYPE
+    
     
     CONTAINS
     
@@ -69,7 +80,7 @@ MODULE MODULE_CREATE_SURFACE
         TYPE(CONFIG), INTENT(INOUT) :: C
         TYPE(SURFACE), INTENT(INOUT) :: S
         
-        REAL*8 :: PT(3,2)
+        REAL*8 :: PT(3,2), LCHORD
         INTEGER :: I, J, K, L
         
         S%NP = C%N * C%M
@@ -105,7 +116,11 @@ MODULE MODULE_CREATE_SURFACE
                 S%GRIDS(K, 4) = J
                 S%GRIDS(K, 5) = I
                 IF (C%DIRS == 2) THEN
-                    S%GRIDS(K, 2) = C%LE(1,2) + (J - 1) * C%DY
+                    IF (C%SOPT == 0) THEN
+                        S%GRIDS(K, 2) = C%LE(1,2) + (J - 1) * C%DY
+                    ELSE IF (C%SOPT == 1) THEN
+                        S%GRIDS(K, 2) = C%LE(1,2) + (C%LE(C%NLE, 2) - C%LE(1, 2)) * C%SDEF(J)
+                    END IF
                     PT(2,1) = S%GRIDS(K, 2)
                     PT(2,2) = S%GRIDS(K, 2)
                     
@@ -123,7 +138,11 @@ MODULE MODULE_CREATE_SURFACE
                     END IF
                     CALL LININTERP(PT(1,:),PT(3,:),2,S%GRIDS(K, 1),S%GRIDS(K, 3))
                 ELSE IF (C%DIRS == 3) THEN
-                    S%GRIDS(K, 3) = C%LE(1,3) + (J - 1) * C%DZ                    
+                    IF (C%SOPT == 0) THEN
+                        S%GRIDS(K, 3) = C%LE(1,3) + (J - 1) * C%DZ
+                    ELSE IF (C%SOPT == 1) THEN
+                        S%GRIDS(K, 3) = C%LE(1,3) + (C%LE(NLE, 3) - C%LE(1, 3)) * C%SDEF(J)
+                    END IF                        
                     PT(3,1) = S%GRIDS(K, 3)
                     PT(3,2) = S%GRIDS(K, 3)
                     ! Point at the Leading Edge
@@ -207,13 +226,22 @@ MODULE MODULE_CREATE_SURFACE
         READ(10,*)C%DIRS
         READ(10,*)C%N
         READ(10,*)C%M
+        READ(10,*)C%POPT
         READ(10,*)C%COPT
         IF (C%COPT == 1) THEN
             ALLOCATE(C%CDEF(C%M + 1))  ! GRIDS POSITIONS CHORDWISE
             READ(10, *)(C%CDEF(I), I=1,SIZE(C%CDEF))
         END IF
+        READ(10,*)C%SOPT
+        IF (C%SOPT == 1) THEN
+            ALLOCATE(C%SDEF(C%N + 1))  ! GRIDS POSITIONS SPANWISE
+            READ(10, *)(C%SDEF(I), I=1,SIZE(C%SDEF))
+        END IF        
         READ(10,*)C%NLE
         
+        IF (C%POPT == 1) then
+            ALLOCATE(C%PROFILES(C%NLE))
+        END IF
         ALLOCATE(C%LE(C%NLE, 5))
         ALLOCATE(C%TE(C%NLE, 3))
         
@@ -222,7 +250,12 @@ MODULE MODULE_CREATE_SURFACE
         
         DO I=1,C%NLE
             
-            READ(10,*)(C%LE(I,J),J=1,5)
+            IF (C%POPT == 1) THEN
+                READ(10,*)(C%LE(I,J),J=1,5), C%PROFILES(I)%FNAME
+                CALL READ_AIRFOIL(C%PROFILES(I))
+            ELSE
+                READ(10,*)(C%LE(I,J),J=1,5)
+            END IF
             
             C%TE(I,1) = C%LE(I,1) + C%LE(I,4)
             IF (C%DIRS == 2) THEN
@@ -249,7 +282,9 @@ MODULE MODULE_CREATE_SURFACE
             C%DY = (C%LE(C%NLE,2) - C%LE(1,2)) / C%N
         ELSE IF (C%DIRS == 3) THEN
             C%DZ = (C%LE(C%NLE,3) - C%LE(1,3)) / C%N
-        END IF        
+        END IF
+            
+        
         
         CLOSE(10)
         CLOSE(21)
@@ -343,6 +378,34 @@ MODULE MODULE_CREATE_SURFACE
     !==================================================
     
     
+    
+    !==================================================
+    SUBROUTINE READ_AIRFOIL(AF)
+    
+        TYPE(AIRFOIL), INTENT(INOUT) :: AF
+        INTEGER :: I
+        
+        OPEN(UNIT=77, FILE=FNAME, STATUS='OLD')
+        
+        READ(77, *) AF%NUP
+        ALLOCATE(AF%UPSUF(AF%NUP, 2))
+        ALLOCATE(AF%UPSUF2(AF%NUP, 3))
+            
+        DO I = 1, AF%NUP
+           READ(77, *)AF%UPSUF(I, 1), AF%UPSUF(I, 2)
+        END DO
+
+        READ(77, *) AF%NUP
+        ALLOCATE(AF%UPSUF(AF%NLO, 2))
+        ALLOCATE(AF%UPSUF2(AF%NLO, 3))
+            
+        DO I = 1, AF%NUP
+           READ(77, *)AF%LOSUF(I, 1), AF%LOSUF(I, 2)
+        END DO
+        
+        CLOSE(77)
+    
+    END SUBROUTINE
     
     
 END MODULE
